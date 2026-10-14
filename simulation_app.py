@@ -396,6 +396,7 @@ spot_kpi4 = kpi4.empty()
 inspection_spot = st.empty()
 chart_spot = st.empty()
 conv_spot = st.empty()
+mean_spot = st.empty()
 
 # ============================================================
 # 12. 渲染目前畫面
@@ -431,11 +432,13 @@ def render_frame_ui(frame_n):
     spot_kpi3.markdown(render_kpi_html(f"模擬 {event_label}", "Simulation", event_text, "#007AFF"), unsafe_allow_html=True)
     spot_kpi4.markdown(render_kpi_html(f"理論 {event_label}", "Theory", f"{theory_probability:.4f}", "#FF3B30"), unsafe_allow_html=True)
 
-    chart_spot.markdown(f"### {chart_title}")
-    chart_spot.bar_chart(
-        make_histogram_df(current_values, max_x=max_x),
-        use_container_width=True
-    )
+    # 使用固定容器包住標題與圖表，避免同一個 st.empty() 互相覆蓋位置
+    with chart_spot.container():
+        st.markdown(f"### {chart_title}")
+        st.bar_chart(
+            make_histogram_df(current_values, max_x=max_x),
+            use_container_width=True
+        )
 
     # 收斂圖最多取 400 個點，避免每一幀都傳送數千筆資料
     conv_n = min(frame_n, 400)
@@ -444,13 +447,17 @@ def render_frame_ui(frame_n):
         "模擬值": cumulative_probability[conv_idx],
         "理論值": np.full(conv_n, theory_probability)
     }, index=conv_idx + 1)
-    conv_spot.markdown(f"### {conv_title}")
-    conv_spot.line_chart(
-        df_conv,
-        use_container_width=True
-    )
+    with conv_spot.container():
+        st.markdown(f"### {conv_title}")
+        st.line_chart(
+            df_conv,
+            use_container_width=True
+        )
 
-    st.caption(f"目前平均值 {mean_label} = {current_mean:.4f} ｜ 理論平均 = {theory_mean:.4f}")
+    # 平均值也更新固定位置，避免動畫每一幀都新增一行文字、推擠下方圖表
+    mean_spot.caption(
+        f"目前平均值 {mean_label} = {current_mean:.4f} ｜ 理論平均 = {theory_mean:.4f}"
+    )
 
 # ============================================================
 # 13. Start / Pause / Finish
