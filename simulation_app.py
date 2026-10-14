@@ -175,17 +175,30 @@ def run_simulation_2(total_n, seed):
 # 6. Streamlit 原生圖表
 #    不依賴 Plotly，避免 Streamlit Cloud 缺少 plotly 套件
 # ============================================================
-def make_histogram_df(values, max_x=None):
+def make_histogram_df(values, max_x=None, simulation_type=None):
+    """建立模擬相對次數與理論機率的對照資料。"""
     if max_x is None:
         max_x = int(np.max(values))
 
-    min_x = 0 if np.min(values) == 0 else 1
+    min_x = 0 if simulation_type and simulation_type.startswith("模擬一") else 1
     x_values = np.arange(min_x, max_x + 1)
     counts = np.array([np.sum(values == x) for x in x_values])
     relative_frequency = counts / len(values)
 
+    if simulation_type and simulation_type.startswith("模擬一"):
+        # X ~ Hypergeometric(N=40, K=8, n=10)
+        theoretical_probability = np.array([
+            comb(8, int(x)) * comb(32, 10 - int(x)) / comb(40, 10)
+            if 0 <= x <= 8 and 0 <= 10 - x <= 32 else 0.0
+            for x in x_values
+        ])
+    else:
+        # Y ~ Geometric(p=0.8), P(Y=y)=0.8*(0.2)^(y-1)
+        theoretical_probability = 0.8 * np.power(0.2, x_values - 1)
+
     return pd.DataFrame({
-        "相對次數": relative_frequency
+        "模擬相對次數": relative_frequency,
+        "理論機率": theoretical_probability,
     }, index=x_values)
 
 # ============================================================
@@ -461,9 +474,14 @@ def render_frame_ui(frame_n):
     with chart_spot.container():
         st.markdown(f"### {chart_title}")
         st.bar_chart(
-            make_histogram_df(current_values, max_x=max_x),
-            use_container_width=True
+            make_histogram_df(
+                current_values,
+                max_x=max_x,
+                simulation_type=simulation_type,
+            ),
+            use_container_width=True,
         )
+        st.caption("比較每個結果的模擬相對次數與理論機率；模擬次數增加時，兩者通常會逐漸接近。")
 
     # 收斂圖最多取 400 個點，避免每一幀都傳送數千筆資料
     conv_n = min(frame_n, 400)
