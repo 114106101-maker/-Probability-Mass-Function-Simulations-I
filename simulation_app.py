@@ -3,6 +3,7 @@ import textwrap
 import numpy as np
 import pandas as pd
 import streamlit as st
+import streamlit.components.v1 as components
 import altair as alt
 from math import comb
 
@@ -341,6 +342,7 @@ with st.sidebar:
     st.session_state.total_n = total_n
 
     fps = st.slider("動畫速率 (FPS) / Speed", 2, 15, 6)
+    sound_enabled = st.checkbox("🔊 開啟動畫提示音", value=True, help="每次動畫更新時播放短提示音；若瀏覽器阻擋自動播放，請先點擊頁面中的啟用音效按鈕。")
     seed = st.number_input("隨機種子 (Seed) / Random Seed", 0, 9999, 42)
 
     st.divider()
@@ -523,6 +525,44 @@ def render_frame_ui(frame_n):
     mean_spot.caption(
         f"目前平均值 {mean_label} = {current_mean:.4f} ｜ 理論平均 = {theory_mean:.4f}"
     )
+
+    # 瀏覽器端提示音：先由使用者點擊啟用，後續每次動畫更新播放短音。
+    if sound_enabled:
+        components.html(
+            f"""<div style="font-family: sans-serif; font-size: 12px; color: #666;">
+            <button id="enableSound" style="padding:6px 10px;border:1px solid #ccc;border-radius:8px;background:#fff;cursor:pointer;">
+              🔊 啟用／測試音效
+            </button>
+            <span id="soundStatus" style="margin-left:8px;">首次使用請點擊按鈕允許播放音效</span>
+            <script>
+              (() => {{
+                const button = document.getElementById('enableSound');
+                const status = document.getElementById('soundStatus');
+                let ctx;
+                function beep(freq=740, duration=0.075) {{
+                  if (!ctx) ctx = new (window.AudioContext || window.webkitAudioContext)();
+                  if (ctx.state === 'suspended') ctx.resume();
+                  const osc = ctx.createOscillator();
+                  const gain = ctx.createGain();
+                  osc.type = 'sine';
+                  osc.frequency.value = freq;
+                  gain.gain.setValueAtTime(0.0001, ctx.currentTime);
+                  gain.gain.exponentialRampToValueAtTime(0.12, ctx.currentTime + 0.01);
+                  gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + duration);
+                  osc.connect(gain); gain.connect(ctx.destination);
+                  osc.start(); osc.stop(ctx.currentTime + duration + 0.01);
+                }}
+                button.addEventListener('click', () => {{
+                  try {{ beep(880, 0.12); status.textContent = '音效已測試；若動畫沒有連續提示音，請檢查瀏覽器音量與自動播放設定。'; }}
+                  catch (e) {{ status.textContent = '無法播放音效，請檢查瀏覽器設定。'; }}
+                }});
+                // 每個畫面更新時發出一聲短音；瀏覽器仍可能要求使用者先互動解鎖音訊。
+                try {{ beep({650 + (frame_n % 5) * 70}, 0.055); }} catch (e) {{}}
+              }})();
+            </script>
+            </div>""",
+            height=42,
+        )
 
 # ============================================================
 # 13. Start / Pause / Finish
