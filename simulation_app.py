@@ -556,14 +556,14 @@ def render_frame_ui(frame_n, play_sound=False):
                     gain.connect(ctx.destination);
                     osc.start(t);
                     osc.stop(t + 0.21);
-                  }}
+                  }});
                 }}
                 button.addEventListener('click', async () => {{
                   try {{
                     if (!ctx) ctx = new (window.AudioContext || window.webkitAudioContext)();
-                    if (ctx.state === 'suspended') await ctx.resume();
+                    if (ctx.state !== 'running') await ctx.resume();
                     playChime();
-                    status.textContent = '已播放柔和提示音';
+                    status.textContent = '音效已啟用；若動畫仍無聲，請確認瀏覽器分頁未靜音。';
                   }} catch (e) {{ status.textContent = '無法播放，請檢查瀏覽器音量與音效權限'; }}
                 }});
                 if ({str(bool(play_sound)).lower()}) {{
@@ -571,8 +571,8 @@ def render_frame_ui(frame_n, play_sound=False):
                   setTimeout(async () => {{
                     try {{
                       if (!ctx) ctx = new (window.AudioContext || window.webkitAudioContext)();
-                      if (ctx.state === 'suspended') await ctx.resume();
-                      playChime();
+                      if (ctx.state !== 'running') await ctx.resume();
+                      if (ctx.state === 'running') playChime();
                     }} catch (e) {{ /* 瀏覽器可能要求先由使用者點擊啟用 */ }}
                   }}, 120);
                 }}
