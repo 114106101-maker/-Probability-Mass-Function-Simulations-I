@@ -542,20 +542,24 @@ def render_frame_ui(frame_n, play_sound=False):
                 function playChime() {{
                   if (!ctx) ctx = new (window.AudioContext || window.webkitAudioContext)();
                   const start = ctx.currentTime + 0.015;
-                  // 恢復原本柔和的三音鈴聲；保留立即排程，不額外延遲以改善同步。
-                  [523.25, 659.25, 783.99].forEach((freq, i) => {{
+                  // 模擬一保留原本柔和三音鈴聲；模擬二使用較低、下降的雙音提示。
+                  const isPacketSimulation = {str(simulation_type.startswith("模擬二")).lower()};
+                  const notes = isPacketSimulation
+                    ? [659.25, 493.88]
+                    : [523.25, 659.25, 783.99];
+                  notes.forEach((freq, i) => {{
                     const osc = ctx.createOscillator();
                     const gain = ctx.createGain();
-                    const t = start + i * 0.045;
-                    osc.type = 'sine';
+                    const t = start + i * (isPacketSimulation ? 0.075 : 0.045);
+                    osc.type = isPacketSimulation ? 'triangle' : 'sine';
                     osc.frequency.setValueAtTime(freq, t);
                     gain.gain.setValueAtTime(0.0001, t);
-                    gain.gain.exponentialRampToValueAtTime(0.045, t + 0.008);
-                    gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.065);
+                    gain.gain.exponentialRampToValueAtTime(isPacketSimulation ? 0.035 : 0.045, t + 0.008);
+                    gain.gain.exponentialRampToValueAtTime(0.0001, t + (isPacketSimulation ? 0.09 : 0.065));
                     osc.connect(gain);
                     gain.connect(ctx.destination);
                     osc.start(t);
-                    osc.stop(t + 0.07);
+                    osc.stop(t + (isPacketSimulation ? 0.095 : 0.07));
                   }});
                 }}
                 button.addEventListener('click', async () => {{
