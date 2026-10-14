@@ -3,6 +3,7 @@ import textwrap
 import numpy as np
 import pandas as pd
 import streamlit as st
+import altair as alt
 from math import comb
 
 # ============================================================
@@ -473,15 +474,36 @@ def render_frame_ui(frame_n):
     # 使用固定容器包住標題與圖表，避免同一個 st.empty() 互相覆蓋位置
     with chart_spot.container():
         st.markdown(f"### {chart_title}")
-        st.bar_chart(
-            make_histogram_df(
-                current_values,
-                max_x=max_x,
-                simulation_type=simulation_type,
-            ),
-            use_container_width=True,
+        histogram_df = make_histogram_df(
+            current_values,
+            max_x=max_x,
+            simulation_type=simulation_type,
+        ).rename_axis("結果").reset_index()
+        histogram_long = histogram_df.melt(
+            id_vars="結果",
+            value_vars=["模擬相對次數", "理論機率"],
+            var_name="機率類型",
+            value_name="機率",
         )
-        st.caption("比較每個結果的模擬相對次數與理論機率；模擬次數增加時，兩者通常會逐漸接近。")
+        # 用 xOffset 將兩組長條並排顯示，避免模擬值與理論值重疊
+        histogram_chart = (
+            alt.Chart(histogram_long)
+            .mark_bar()
+            .encode(
+                x=alt.X("結果:O", title=x_title, axis=alt.Axis(labelAngle=0)),
+                xOffset=alt.XOffset("機率類型:N"),
+                y=alt.Y("機率:Q", title="機率", scale=alt.Scale(domainMin=0)),
+                color=alt.Color("機率類型:N", title="圖例"),
+                tooltip=[
+                    alt.Tooltip("結果:O", title="結果"),
+                    alt.Tooltip("機率類型:N", title="類型"),
+                    alt.Tooltip("機率:Q", title="機率", format=".4f"),
+                ],
+            )
+            .properties(height=320)
+        )
+        st.altair_chart(histogram_chart, use_container_width=True)
+        st.caption("每個結果的模擬相對次數與理論機率以並排長條呈現；模擬次數增加時，兩者通常會逐漸接近。")
 
     # 收斂圖最多取 400 個點，避免每一幀都傳送數千筆資料
     conv_n = min(frame_n, 400)
