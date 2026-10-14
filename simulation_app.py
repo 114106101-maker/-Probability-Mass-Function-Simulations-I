@@ -90,6 +90,15 @@ div.stButton > button[kind="primary"] p,
 div.stButton > button[kind="primary"] span {
     color: #ffffff !important;
 }
+.inspect-card { background:#f8f9fa; border-radius:18px; padding:16px; margin:8px 0 18px 0; border:1px solid rgba(0,0,0,.06); }
+.inspect-title { font-size:16px; font-weight:750; margin-bottom:10px; }
+.inspect-grid { display:grid; grid-template-columns:repeat(5,minmax(70px,1fr)); gap:8px; }
+.inspect-item { background:#fff; border-radius:14px; padding:10px 6px; text-align:center; border:1px solid rgba(0,0,0,.06); box-shadow:0 2px 8px rgba(0,0,0,.03); }
+.inspect-item .num { font-size:11px; color:#8e8e93; }
+.inspect-item .state { font-size:24px; margin:2px 0; }
+.inspect-item .label { font-size:11px; font-weight:650; }
+.inspect-success { color:#34c759; } .inspect-fail { color:#ff3b30; } .inspect-defect { color:#ff9500; } .inspect-normal { color:#007aff; }
+@media (max-width:700px) { .inspect-grid { grid-template-columns:repeat(5,minmax(50px,1fr)); gap:5px; } .inspect-item { padding:7px 3px; } }
 </style>
 """)
 st.markdown(custom_css, unsafe_allow_html=True)
@@ -170,7 +179,99 @@ def make_histogram_df(values, max_x=None):
     }, index=x_values)
 
 # ============================================================
-# 7. Session State
+# 7. 檢查動畫資料
+# ============================================================
+@st.cache_data
+def build_inspection_records_1(total_n, seed, num_records=60):
+    """建立模擬一的逐次抽樣檢查動畫紀錄。"""
+    rng = np.random.default_rng(seed)
+    data = np.array([1] * 8 + [0] * 32)
+    indices = np.unique(np.linspace(1, total_n, num=min(total_n, num_records), dtype=int))
+    target_set = set(indices.tolist())
+    records = {}
+    for i in range(1, total_n + 1):
+        sample = rng.choice(data, size=10, replace=False)
+        if i in target_set:
+            records[i] = sample.tolist()
+    return records
+
+
+@st.cache_data
+def build_inspection_records_2(total_n, seed, num_records=60):
+    """建立模擬二的逐次重傳動畫紀錄。"""
+    rng = np.random.default_rng(seed)
+    indices = np.unique(np.linspace(1, total_n, num=min(total_n, num_records), dtype=int))
+    target_set = set(indices.tolist())
+    records = {}
+    for i in range(1, total_n + 1):
+        attempts = int(rng.geometric(p=0.8))
+        if i in target_set:
+            records[i] = attempts
+    return records
+
+
+def render_inspection_ui(frame_n):
+    """顯示目前動畫畫面的實際檢查過程。"""
+    checkpoint_pos = np.searchsorted(frame_indices, frame_n, side="right") - 1
+    checkpoint_pos = max(0, checkpoint_pos)
+    checkpoint = int(frame_indices[checkpoint_pos])
+
+    if simulation_type.startswith("模擬一"):
+        records = build_inspection_records_1(total_n, seed, len(frame_indices))
+        sample = records.get(checkpoint)
+        if sample is None:
+            checkpoint = min(records.keys(), key=lambda k: abs(k - frame_n))
+            sample = records[checkpoint]
+
+        items = []
+        for j, state in enumerate(sample, 1):
+            if state == 1:
+                icon, cls, label = "⚠️", "inspect-defect", "有缺陷"
+            else:
+                icon, cls, label = "✓", "inspect-normal", "正常"
+            items.append(
+                f'<div class="inspect-item"><div class="num">程式 {j}</div>'
+                f'<div class="state {cls}">{icon}</div><div class="label {cls}">{label}</div></div>'
+            )
+
+        defect_count = int(sum(sample))
+        st.markdown(
+            f'<div class="inspect-card">'
+            f'<div class="inspect-title">🔎 第 {checkpoint:,} 次抽樣檢查：逐一檢查 10 個程式</div>'
+            f'<div style="font-size:13px;color:#6e6e73;margin-bottom:10px;">'
+            f'本次抽到 <b>{defect_count}</b> 個缺陷程式、<b>{10-defect_count}</b> 個正常程式。</div>'
+            f'<div class="inspect-grid">{"".join(items)}</div></div>',
+            unsafe_allow_html=True
+        )
+    else:
+        records = build_inspection_records_2(total_n, seed, len(frame_indices))
+        attempts = records.get(checkpoint)
+        if attempts is None:
+            checkpoint = min(records.keys(), key=lambda k: abs(k - frame_n))
+            attempts = records[checkpoint]
+
+        items = []
+        for j in range(1, attempts + 1):
+            success = j == attempts
+            icon = "✓" if success else "✕"
+            cls = "inspect-success" if success else "inspect-fail"
+            label = "成功" if success else "失敗"
+            items.append(
+                f'<div class="inspect-item"><div class="num">第 {j} 次</div>'
+                f'<div class="state {cls}">{icon}</div><div class="label {cls}">{label}</div></div>'
+            )
+
+        st.markdown(
+            f'<div class="inspect-card">'
+            f'<div class="inspect-title">📡 第 {checkpoint:,} 次傳輸檢查：持續重傳直到成功</div>'
+            f'<div style="font-size:13px;color:#6e6e73;margin-bottom:10px;">'
+            f'本次需要 <b>{attempts}</b> 次傳輸才成功。</div>'
+            f'<div class="inspect-grid">{"".join(items)}</div></div>',
+            unsafe_allow_html=True
+        )
+
+# ============================================================
+# 8. Session State
 # ============================================================
 if "simulation_type" not in st.session_state:
     st.session_state.simulation_type = "模擬一：軟體缺陷抽樣檢查"
@@ -333,6 +434,8 @@ def render_frame_ui(frame_n):
         max_x = min(max(8, int(np.percentile(values, 99))), 15)
         conv_title = "P(Y>3) 收斂軌跡"
         conv_y_title = "模擬 P(Y>3)"
+
+    render_inspection_ui(frame_n)
 
     spot_kpi1.markdown(render_kpi_html("模擬次數", "Simulations", f"{frame_n:,}"), unsafe_allow_html=True)
     spot_kpi2.markdown(render_kpi_html(f"{event_label} 發生次數", "Event Count", kpi2_text), unsafe_allow_html=True)
