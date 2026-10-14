@@ -98,7 +98,19 @@ div.stButton > button[kind="primary"] span {
 .inspect-item .state { font-size:24px; margin:2px 0; }
 .inspect-item .label { font-size:11px; font-weight:650; }
 .inspect-success { color:#34c759; } .inspect-fail { color:#ff3b30; } .inspect-defect { color:#ff9500; } .inspect-normal { color:#007aff; }
-@media (max-width:700px) { .inspect-grid { grid-template-columns:repeat(5,minmax(50px,1fr)); gap:5px; } .inspect-item { padding:7px 3px; } }
+.packet-scene { background:#fff; border:1px solid rgba(0,0,0,.07); border-radius:14px; padding:14px; margin:12px 0; }
+.packet-lane { display:grid; grid-template-columns:76px minmax(100px,1fr) 76px; align-items:center; gap:10px; margin:10px 0; }
+.packet-node { text-align:center; font-size:12px; font-weight:700; color:#4b5563; }
+.packet-node .node-icon { font-size:25px; display:block; }
+.packet-track { height:34px; position:relative; border-top:2px dashed #cbd5e1; margin-top:12px; }
+.packet-track:before { content:""; position:absolute; right:-1px; top:-7px; border-left:10px solid #94a3b8; border-top:6px solid transparent; border-bottom:6px solid transparent; }
+.packet-dot { position:absolute; left:0; top:-17px; width:34px; height:30px; border-radius:8px; background:#dbeafe; border:1px solid #60a5fa; display:flex; align-items:center; justify-content:center; font-size:17px; box-shadow:0 2px 5px rgba(0,0,0,.08); animation:packetMove 1.8s ease-in-out infinite; }
+.packet-dot.failed { --travel: calc((100% - 34px) * .62); animation-name:packetFail; }
+.packet-dot.success { --travel: calc(100% - 34px); animation-name:packetMove; }
+@keyframes packetMove { 0% { left:0; } 75%,100% { left:var(--travel, calc(100% - 34px)); } }
+@keyframes packetFail { 0% { left:0; opacity:1; } 60% { left:var(--travel); opacity:1; } 75%,100% { left:var(--travel); opacity:.15; } }
+.packet-status { font-size:12px; font-weight:700; margin-top:2px; }
+@media (max-width:700px) { .inspect-grid { grid-template-columns:repeat(5,minmax(50px,1fr)); gap:5px; } .inspect-item { padding:7px 3px; } .packet-lane { grid-template-columns:58px minmax(70px,1fr) 58px; gap:6px; } .packet-node { font-size:10px; } }
 </style>
 """)
 st.markdown(custom_css, unsafe_allow_html=True)
@@ -237,21 +249,34 @@ def render_inspection_ui(frame_n):
     else:
         attempts = int(values[checkpoint - 1])
         items = []
+        lanes = []
         for j in range(1, attempts + 1):
             success = j == attempts
             icon = "✓" if success else "✕"
             cls = "inspect-success" if success else "inspect-fail"
-            label = "成功" if success else "失敗"
+            label = "封包抵達，傳輸成功" if success else "封包遺失，準備重傳"
+            packet_cls = "success" if success else "failed"
             items.append(
                 f'<div class="inspect-item"><div class="num">第 {j} 次</div>'
-                f'<div class="state {cls}">{icon}</div><div class="label {cls}">{label}</div></div>'
+                f'<div class="state {cls}">{icon}</div><div class="label {cls}">{"成功" if success else "失敗"}</div></div>'
+            )
+            lanes.append(
+                f'<div class="packet-lane">'
+                f'<div class="packet-node"><span class="node-icon">💻</span>傳送端</div>'
+                f'<div><div class="packet-track"><div class="packet-dot {packet_cls}" '
+                f'style="animation-delay:{(j-1)*0.18:.2f}s; --travel:calc(100% - 34px);">📦</div></div>'
+                f'<div class="packet-status {cls}">第 {j} 次：{label}</div></div>'
+                f'<div class="packet-node"><span class="node-icon">🖥️</span>接收端</div>'
+                f'</div>'
             )
 
         inspection_spot.markdown(
             f'<div class="inspect-card">'
-            f'<div class="inspect-title">📡 第 {checkpoint:,} 次傳輸檢查：持續重傳直到成功</div>'
+            f'<div class="inspect-title">📡 第 {checkpoint:,} 次封包傳遞動畫</div>'
             f'<div style="font-size:13px;color:#6e6e73;margin-bottom:10px;">'
-            f'本次需要 <b>{attempts}</b> 次傳輸才成功。</div>'
+            f'每個 📦 代表一次封包傳送；紅色失敗封包會中途消失，直到綠色封包成功抵達。'
+            f'本次共傳送 <b>{attempts}</b> 次。</div>'
+            f'<div class="packet-scene">{"".join(lanes)}</div>'
             f'<div class="inspect-grid">{"".join(items)}</div></div>',
             unsafe_allow_html=True
         )
