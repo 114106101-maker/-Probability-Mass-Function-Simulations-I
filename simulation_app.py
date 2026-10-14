@@ -526,7 +526,7 @@ def render_frame_ui(frame_n, play_sound=False):
         f"目前平均值 {mean_label} = {current_mean:.4f} ｜ 理論平均 = {theory_mean:.4f}"
     )
 
-    # 瀏覽器端柔和三音提示：只在動畫播放時觸發，並稍微延後以貼近畫面更新。
+    # 瀏覽器端柔和三音提示：只在動畫播放時觸發。
     if sound_enabled:
         components.html(
             f"""<div style="font-family: sans-serif; font-size: 12px; color: #666;">
@@ -542,20 +542,20 @@ def render_frame_ui(frame_n, play_sound=False):
                 function playChime() {{
                   if (!ctx) ctx = new (window.AudioContext || window.webkitAudioContext)();
                   const start = ctx.currentTime + 0.015;
-                  // 縮短成清楚、柔和的雙音提示，避免音效延續到下一幀。
-                  [659.25, 783.99].forEach((freq, i) => {{
+                  // 恢復原本柔和的三音鈴聲；保留立即排程，不額外延遲以改善同步。
+                  [523.25, 659.25, 783.99].forEach((freq, i) => {{
                     const osc = ctx.createOscillator();
                     const gain = ctx.createGain();
-                    const t = start + i * 0.035;
+                    const t = start + i * 0.045;
                     osc.type = 'sine';
                     osc.frequency.setValueAtTime(freq, t);
                     gain.gain.setValueAtTime(0.0001, t);
                     gain.gain.exponentialRampToValueAtTime(0.045, t + 0.008);
-                    gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.045);
+                    gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.065);
                     osc.connect(gain);
                     gain.connect(ctx.destination);
                     osc.start(t);
-                    osc.stop(t + 0.05);
+                    osc.stop(t + 0.07);
                   }});
                 }}
                 button.addEventListener('click', async () => {{
