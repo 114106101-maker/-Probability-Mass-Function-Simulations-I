@@ -134,14 +134,8 @@ def theoretical_sim2_p_y_gt_3():
 def run_simulation_1(total_n, seed):
     rng = np.random.default_rng(seed)
 
-    # 1 = 缺陷，0 = 正常
-    data = np.array([1] * 8 + [0] * 32)
-
-    # 每次不放回抽取 10 個
-    x_values = np.empty(total_n, dtype=int)
-    for i in range(total_n):
-        sample = rng.choice(data, size=10, replace=False)
-        x_values[i] = np.sum(sample)
+    # 直接使用超幾何分布向量化產生結果，避免 10,000 次 Python 迴圈
+    x_values = rng.hypergeometric(ngood=8, nbad=32, nsample=10, size=total_n)
 
     cumulative_mean = np.cumsum(x_values) / np.arange(1, total_n + 1)
     cumulative_p_x3 = np.cumsum(x_values == 3) / np.arange(1, total_n + 1)
@@ -189,10 +183,9 @@ def build_inspection_records_1(total_n, seed, num_records=60):
     indices = np.unique(np.linspace(1, total_n, num=min(total_n, num_records), dtype=int))
     target_set = set(indices.tolist())
     records = {}
-    for i in range(1, total_n + 1):
+    for i in indices:
         sample = rng.choice(data, size=10, replace=False)
-        if i in target_set:
-            records[i] = sample.tolist()
+        records[int(i)] = sample.tolist()
     return records
 
 
@@ -203,10 +196,8 @@ def build_inspection_records_2(total_n, seed, num_records=60):
     indices = np.unique(np.linspace(1, total_n, num=min(total_n, num_records), dtype=int))
     target_set = set(indices.tolist())
     records = {}
-    for i in range(1, total_n + 1):
-        attempts = int(rng.geometric(p=0.8))
-        if i in target_set:
-            records[i] = attempts
+    for i in indices:
+        records[int(i)] = int(rng.geometric(p=0.8))
     return records
 
 
@@ -315,7 +306,7 @@ with st.sidebar:
     )
     st.session_state.total_n = total_n
 
-    fps = st.slider("動畫速率 (FPS) / Speed", 2, 25, 8)
+    fps = st.slider("動畫速率 (FPS) / Speed", 2, 15, 6)
     seed = st.number_input("隨機種子 (Seed) / Random Seed", 0, 9999, 42)
 
     st.divider()
@@ -395,7 +386,7 @@ st.markdown(description, unsafe_allow_html=True)
 # ============================================================
 # 11. 動畫資料
 # ============================================================
-num_frames = min(total_n, 60)
+num_frames = min(total_n, 24)
 frame_indices = np.unique(np.linspace(1, total_n, num=num_frames, dtype=int))
 
 st.subheader("📈 數據儀表板 (Data Dashboard)")
@@ -448,10 +439,13 @@ def render_frame_ui(frame_n):
         use_container_width=True
     )
 
+    # 收斂圖最多取 400 個點，避免每一幀都傳送數千筆資料
+    conv_n = min(frame_n, 400)
+    conv_idx = np.linspace(0, frame_n - 1, conv_n, dtype=int)
     df_conv = pd.DataFrame({
-        "模擬值": cumulative_probability[:frame_n],
-        "理論值": [theory_probability] * frame_n
-    }, index=np.arange(1, frame_n + 1))
+        "模擬值": cumulative_probability[conv_idx],
+        "理論值": np.full(conv_n, theory_probability)
+    }, index=conv_idx + 1)
     conv_spot.markdown(f"### {conv_title}")
     conv_spot.line_chart(
         df_conv,
