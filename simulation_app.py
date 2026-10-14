@@ -542,20 +542,20 @@ def render_frame_ui(frame_n, play_sound=False):
                 function playChime() {{
                   if (!ctx) ctx = new (window.AudioContext || window.webkitAudioContext)();
                   const start = ctx.currentTime + 0.015;
-                  // 柔和的 C 大調三音鈴聲，音量漸入漸出，避免刺耳的嗶聲。
-                  [523.25, 659.25, 783.99].forEach((freq, i) => {{
+                  // 縮短成清楚、柔和的雙音提示，避免音效延續到下一幀。
+                  [659.25, 783.99].forEach((freq, i) => {{
                     const osc = ctx.createOscillator();
                     const gain = ctx.createGain();
-                    const t = start + i * 0.075;
+                    const t = start + i * 0.035;
                     osc.type = 'sine';
                     osc.frequency.setValueAtTime(freq, t);
                     gain.gain.setValueAtTime(0.0001, t);
-                    gain.gain.exponentialRampToValueAtTime(0.055, t + 0.018);
-                    gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.19);
+                    gain.gain.exponentialRampToValueAtTime(0.045, t + 0.008);
+                    gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.045);
                     osc.connect(gain);
                     gain.connect(ctx.destination);
                     osc.start(t);
-                    osc.stop(t + 0.21);
+                    osc.stop(t + 0.05);
                   }});
                 }}
                 button.addEventListener('click', async () => {{
@@ -567,14 +567,14 @@ def render_frame_ui(frame_n, play_sound=False):
                   }} catch (e) {{ status.textContent = '無法播放，請檢查瀏覽器音量與音效權限'; }}
                 }});
                 if ({str(bool(play_sound)).lower()}) {{
-                  // 留一點時間讓 Streamlit 先更新畫面，再播放對應提示音。
-                  setTimeout(async () => {{
+                  // 不再額外延遲 120ms；在此動畫幀的 iframe 首次繪製時立刻排程音效。
+                  requestAnimationFrame(async () => {{
                     try {{
                       if (!ctx) ctx = new (window.AudioContext || window.webkitAudioContext)();
                       if (ctx.state !== 'running') await ctx.resume();
                       if (ctx.state === 'running') playChime();
                     }} catch (e) {{ /* 瀏覽器可能要求先由使用者點擊啟用 */ }}
-                  }}, 120);
+                  }});
                 }}
               }})();
             </script>
