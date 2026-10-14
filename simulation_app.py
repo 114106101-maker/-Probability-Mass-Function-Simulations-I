@@ -226,7 +226,7 @@ def render_inspection_ui(frame_n):
             )
 
         defect_count = int(sum(sample))
-        st.markdown(
+        inspection_spot.markdown(
             f'<div class="inspect-card">'
             f'<div class="inspect-title">🔎 第 {checkpoint:,} 次抽樣檢查：逐一檢查 10 個程式</div>'
             f'<div style="font-size:13px;color:#6e6e73;margin-bottom:10px;">'
@@ -252,7 +252,7 @@ def render_inspection_ui(frame_n):
                 f'<div class="state {cls}">{icon}</div><div class="label {cls}">{label}</div></div>'
             )
 
-        st.markdown(
+        inspection_spot.markdown(
             f'<div class="inspect-card">'
             f'<div class="inspect-title">📡 第 {checkpoint:,} 次傳輸檢查：持續重傳直到成功</div>'
             f'<div style="font-size:13px;color:#6e6e73;margin-bottom:10px;">'
@@ -396,6 +396,8 @@ spot_kpi2 = kpi2.empty()
 spot_kpi3 = kpi3.empty()
 spot_kpi4 = kpi4.empty()
 
+# 抽樣動畫固定放在圖表上方
+inspection_spot = st.empty()
 chart_spot = st.empty()
 conv_spot = st.empty()
 
