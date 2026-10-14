@@ -134,13 +134,17 @@ def theoretical_sim2_p_y_gt_3():
 def run_simulation_1(total_n, seed):
     rng = np.random.default_rng(seed)
 
-    # 直接使用超幾何分布向量化產生結果，避免 10,000 次 Python 迴圈
-    x_values = rng.hypergeometric(ngood=8, nbad=32, nsample=10, size=total_n)
+    # 逐次保存實際抽到的 10 個程式，方便模擬結束後查閱每一次的明細
+    population = np.array([1] * 8 + [0] * 32, dtype=np.int8)
+    samples = np.empty((total_n, 10), dtype=np.int8)
+    for i in range(total_n):
+        samples[i] = rng.choice(population, size=10, replace=False)
 
+    x_values = samples.sum(axis=1)
     cumulative_mean = np.cumsum(x_values) / np.arange(1, total_n + 1)
     cumulative_p_x3 = np.cumsum(x_values == 3) / np.arange(1, total_n + 1)
 
-    return x_values, cumulative_mean, cumulative_p_x3
+    return x_values, cumulative_mean, cumulative_p_x3, samples
 
 
 @st.cache_data
@@ -208,12 +212,8 @@ def render_inspection_ui(frame_n):
     checkpoint = int(frame_indices[checkpoint_pos])
 
     if simulation_type.startswith("模擬一"):
-        records = build_inspection_records_1(total_n, seed, len(frame_indices))
-        sample = records.get(checkpoint)
-        if sample is None:
-            checkpoint = min(records.keys(), key=lambda k: abs(k - frame_n))
-            sample = records[checkpoint]
-
+        # 動畫顯示實際模擬資料，與圖表及結束後的明細一致
+        sample = sample_matrix[checkpoint - 1].tolist()
         items = []
         for j, state in enumerate(sample, 1):
             if state == 1:
@@ -235,12 +235,7 @@ def render_inspection_ui(frame_n):
             unsafe_allow_html=True
         )
     else:
-        records = build_inspection_records_2(total_n, seed, len(frame_indices))
-        attempts = records.get(checkpoint)
-        if attempts is None:
-            checkpoint = min(records.keys(), key=lambda k: abs(k - frame_n))
-            attempts = records[checkpoint]
-
+        attempts = int(values[checkpoint - 1])
         items = []
         for j in range(1, attempts + 1):
             success = j == attempts
@@ -337,7 +332,7 @@ with st.sidebar:
 # 9. 依照選擇執行模擬
 # ============================================================
 if simulation_type.startswith("模擬一"):
-    values, cumulative_mean, cumulative_probability = run_simulation_1(total_n, seed)
+    values, cumulative_mean, cumulative_probability, sample_matrix = run_simulation_1(total_n, seed)
     theory_probability = theoretical_sim1_p_x3()
     theory_mean = 2.0
     event_label = "P(X = 3)"
@@ -345,6 +340,7 @@ if simulation_type.startswith("模擬一"):
     title = "💻 模擬一：軟體缺陷抽樣檢查"
 else:
     values, cumulative_mean, cumulative_probability = run_simulation_2(total_n, seed)
+    sample_matrix = None
     theory_probability = theoretical_sim2_p_y_gt_3()
     theory_mean = 1 / 0.8
     event_label = "P(Y > 3)"
@@ -526,3 +522,56 @@ if st.session_state.anim_status in ["paused", "finished"]:
     with result_col2:
         st.markdown(f"**理論 {mean_label}：** `{theory_mean:.6f}`")
         st.markdown(f"**模擬 {mean_label}：** `{final_mean:.6f}`")
+
+    # 模擬結束後可逐次查閱完整抽樣結果
+    st.divider()
+    st.subheader("🔍 每一次抽樣結果查詢 (Trial-by-trial Details)")
+    st.caption("可選擇任一次模擬查看詳細結果；下方表格也列出全部模擬的摘要。")
+
+    detail_col, _ = st.columns([1, 2])
+    with detail_col:
+        selected_trial = st.number_input(
+            "要查看第幾次模擬？", min_value=1, max_value=int(total_n),
+            value=1, step=1, key="selected_trial_detail"
+        )
+
+    trial_idx = int(selected_trial) - 1
+    if simulation_type.startswith("模擬一"):
+        selected_sample = sample_matrix[trial_idx]
+        detail_df = pd.DataFrame({
+            "抽樣位置": np.arange(1, 11),
+            "程式編號": [f"程式 {i}" for i in range(1, 11)],
+            "抽樣結果": ["有缺陷" if state == 1 else "正常" for state in selected_sample],
+        })
+        defect_count = int(selected_sample.sum())
+        st.markdown(
+            f"**第 {int(selected_trial):,} 次結果：** 抽到 {defect_count} 個有缺陷程式、"
+            f"{10 - defect_count} 個正常程式；本次 X = {defect_count}。"
+        )
+        st.dataframe(detail_df, use_container_width=True, hide_index=True)
+    else:
+        attempts = int(values[trial_idx])
+        detail_df = pd.DataFrame({
+            "傳輸次數": np.arange(1, attempts + 1),
+            "結果": ["成功" if j == attempts else "失敗" for j in range(1, attempts + 1)],
+        })
+        st.markdown(f"**第 {int(selected_trial):,} 次結果：** 共傳輸 {attempts} 次才首次成功；本次 Y = {attempts}。")
+        st.dataframe(detail_df, use_container_width=True, hide_index=True)
+
+    # 全部模擬摘要：每一列對應一次模擬，可用 Streamlit 表格搜尋與排序
+    all_trials_df = pd.DataFrame({
+        "模擬次數": np.arange(1, int(total_n) + 1),
+        "結果值": values,
+        f"{event_label} 是否發生": (values == 3) if simulation_type.startswith("模擬一") else (values > 3),
+        "累積平均值": cumulative_mean,
+        f"累積 {event_label}": cumulative_probability,
+    })
+    st.markdown("**全部模擬摘要（每列一筆，可搜尋、排序及下載）**")
+    st.dataframe(all_trials_df, use_container_width=True, hide_index=True)
+    st.download_button(
+        "⬇️ 下載全部模擬結果 CSV",
+        data=all_trials_df.to_csv(index=False).encode("utf-8-sig"),
+        file_name="simulation_trial_results.csv",
+        mime="text/csv",
+        use_container_width=False,
+    )
