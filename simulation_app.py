@@ -3,7 +3,6 @@ import textwrap
 import numpy as np
 import pandas as pd
 import streamlit as st
-import plotly.graph_objects as go
 from math import comb
 
 # ============================================================
@@ -154,65 +153,21 @@ def run_simulation_2(total_n, seed):
     return y_values, cumulative_mean, cumulative_p_y_gt_3
 
 # ============================================================
-# 6. Plotly 圖表
+# 6. Streamlit 原生圖表
+#    不依賴 Plotly，避免 Streamlit Cloud 缺少 plotly 套件
 # ============================================================
-def build_histogram(values, title, x_title, max_x=None):
+def make_histogram_df(values, max_x=None):
     if max_x is None:
         max_x = int(np.max(values))
 
-    x_values = np.arange(0 if np.min(values) == 0 else 1, max_x + 1)
+    min_x = 0 if np.min(values) == 0 else 1
+    x_values = np.arange(min_x, max_x + 1)
     counts = np.array([np.sum(values == x) for x in x_values])
     relative_frequency = counts / len(values)
 
-    fig = go.Figure()
-    fig.add_trace(go.Bar(
-        x=x_values,
-        y=relative_frequency,
-        marker=dict(color="#007AFF"),
-        name="模擬相對次數",
-        hovertemplate=f"{x_title}: %{{x}}<br>相對次數: %{{y:.4f}}<extra></extra>"
-    ))
-
-    fig.update_layout(
-        title=title,
-        height=400,
-        margin=dict(l=10, r=10, t=55, b=10),
-        paper_bgcolor="#ffffff",
-        plot_bgcolor="#ffffff",
-        xaxis=dict(title=x_title, dtick=1, showgrid=True, gridcolor="#f2f2f7"),
-        yaxis=dict(title="相對次數 / Relative Frequency", showgrid=True, gridcolor="#f2f2f7", tickformat=".3f"),
-        showlegend=False
-    )
-    return fig
-
-
-def build_convergence_chart(df, total_n, theory_value, title, y_title):
-    fig = go.Figure()
-    fig.add_trace(go.Scatter(
-        x=df["n"],
-        y=df["模擬值"],
-        mode="lines",
-        name="模擬值 / Simulation",
-        line=dict(color="#007AFF", width=2.2)
-    ))
-    fig.add_trace(go.Scatter(
-        x=df["n"],
-        y=[theory_value] * len(df),
-        mode="lines",
-        name="理論值 / Theory",
-        line=dict(color="#FF3B30", width=2, dash="dash")
-    ))
-    fig.update_layout(
-        height=360,
-        margin=dict(l=10, r=10, t=35, b=10),
-        paper_bgcolor="#ffffff",
-        plot_bgcolor="#ffffff",
-        hovermode="x unified",
-        xaxis=dict(title="模擬次數 n / Simulation Number", range=[1, max(total_n, 10)], showgrid=True, gridcolor="#f2f2f7"),
-        yaxis=dict(title=y_title, showgrid=True, gridcolor="#f2f2f7", tickformat=".4f"),
-        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
-    )
-    return fig
+    return pd.DataFrame({
+        "相對次數": relative_frequency
+    }, index=x_values)
 
 # ============================================================
 # 7. Session State
@@ -384,20 +339,20 @@ def render_frame_ui(frame_n):
     spot_kpi3.markdown(render_kpi_html(f"模擬 {event_label}", "Simulation", event_text, "#007AFF"), unsafe_allow_html=True)
     spot_kpi4.markdown(render_kpi_html(f"理論 {event_label}", "Theory", f"{theory_probability:.4f}", "#FF3B30"), unsafe_allow_html=True)
 
-    chart_spot.plotly_chart(
-        build_histogram(current_values, chart_title, x_title, max_x=max_x),
-        use_container_width=True,
-        config={"displayModeBar": True, "displaylogo": False}
+    chart_spot.markdown(f"### {chart_title}")
+    chart_spot.bar_chart(
+        make_histogram_df(current_values, max_x=max_x),
+        use_container_width=True
     )
 
     df_conv = pd.DataFrame({
-        "n": np.arange(1, frame_n + 1),
-        "模擬值": cumulative_probability[:frame_n]
-    })
-    conv_spot.plotly_chart(
-        build_convergence_chart(df_conv, total_n, theory_probability, conv_title, conv_y_title),
-        use_container_width=True,
-        config={"displayModeBar": True, "displaylogo": False}
+        "模擬值": cumulative_probability[:frame_n],
+        "理論值": [theory_probability] * frame_n
+    }, index=np.arange(1, frame_n + 1))
+    conv_spot.markdown(f"### {conv_title}")
+    conv_spot.line_chart(
+        df_conv,
+        use_container_width=True
     )
 
     st.caption(f"目前平均值 {mean_label} = {current_mean:.4f} ｜ 理論平均 = {theory_mean:.4f}")
