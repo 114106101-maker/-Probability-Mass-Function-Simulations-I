@@ -442,7 +442,7 @@ mean_spot = st.empty()
 # ============================================================
 # 12. 渲染目前畫面
 # ============================================================
-def render_frame_ui(frame_n):
+def render_frame_ui(frame_n, play_sound=False):
     current_values = values[:frame_n]
     current_probability = cumulative_probability[frame_n - 1]
     current_mean = cumulative_mean[frame_n - 1]
@@ -526,38 +526,56 @@ def render_frame_ui(frame_n):
         f"目前平均值 {mean_label} = {current_mean:.4f} ｜ 理論平均 = {theory_mean:.4f}"
     )
 
-    # 瀏覽器端提示音：先由使用者點擊啟用，後續每次動畫更新播放短音。
+    # 瀏覽器端柔和三音提示：只在動畫播放時觸發，並稍微延後以貼近畫面更新。
     if sound_enabled:
         components.html(
             f"""<div style="font-family: sans-serif; font-size: 12px; color: #666;">
             <button id="enableSound" style="padding:6px 10px;border:1px solid #ccc;border-radius:8px;background:#fff;cursor:pointer;">
               🔊 啟用／測試音效
             </button>
-            <span id="soundStatus" style="margin-left:8px;">首次使用請點擊按鈕允許播放音效</span>
+            <span id="soundStatus" style="margin-left:8px;">首次使用請點擊按鈕測試音效</span>
             <script>
               (() => {{
                 const button = document.getElementById('enableSound');
                 const status = document.getElementById('soundStatus');
                 let ctx;
-                function beep(freq=740, duration=0.075) {{
+                function playChime() {{
                   if (!ctx) ctx = new (window.AudioContext || window.webkitAudioContext)();
-                  if (ctx.state === 'suspended') ctx.resume();
-                  const osc = ctx.createOscillator();
-                  const gain = ctx.createGain();
-                  osc.type = 'sine';
-                  osc.frequency.value = freq;
-                  gain.gain.setValueAtTime(0.0001, ctx.currentTime);
-                  gain.gain.exponentialRampToValueAtTime(0.12, ctx.currentTime + 0.01);
-                  gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + duration);
-                  osc.connect(gain); gain.connect(ctx.destination);
-                  osc.start(); osc.stop(ctx.currentTime + duration + 0.01);
+                  const start = ctx.currentTime + 0.015;
+                  // 柔和的 C 大調三音鈴聲，音量漸入漸出，避免刺耳的嗶聲。
+                  [523.25, 659.25, 783.99].forEach((freq, i) => {{
+                    const osc = ctx.createOscillator();
+                    const gain = ctx.createGain();
+                    const t = start + i * 0.075;
+                    osc.type = 'sine';
+                    osc.frequency.setValueAtTime(freq, t);
+                    gain.gain.setValueAtTime(0.0001, t);
+                    gain.gain.exponentialRampToValueAtTime(0.055, t + 0.018);
+                    gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.19);
+                    osc.connect(gain);
+                    gain.connect(ctx.destination);
+                    osc.start(t);
+                    osc.stop(t + 0.21);
+                  }}
                 }}
-                button.addEventListener('click', () => {{
-                  try {{ beep(880, 0.12); status.textContent = '音效已測試；若動畫沒有連續提示音，請檢查瀏覽器音量與自動播放設定。'; }}
-                  catch (e) {{ status.textContent = '無法播放音效，請檢查瀏覽器設定。'; }}
+                button.addEventListener('click', async () => {{
+                  try {{
+                    if (!ctx) ctx = new (window.AudioContext || window.webkitAudioContext)();
+                    if (ctx.state === 'suspended') await ctx.resume();
+                    playChime();
+                    status.textContent = '已播放柔和提示音';
+                  }} catch (e) {{ status.textContent = '無法播放，請檢查瀏覽器音量與音效權限'; }}
                 }});
-                // 每個畫面更新時發出一聲短音；瀏覽器仍可能要求使用者先互動解鎖音訊。
-                try {{ beep({650 + (frame_n % 5) * 70}, 0.055); }} catch (e) {{}}
+                if ({str(bool(play_sound)).lower()}) {{
+                  // 留一點時間讓 Streamlit 先更新畫面，再播放對應提示音。
+                  setTimeout(async () => {{
+                    try {{
+                      if (!ctx) ctx = new (window.AudioContext || window.webkitAudioContext)();
+                      if (ctx.state === 'suspended') await ctx.resume();
+                      playChime();
+                    }} catch (e) {{ /* 瀏覽器可能要求先由使用者點擊啟用 */ }}
+                  }}, 120);
+                }}
               }})();
             </script>
             </div>""",
@@ -595,7 +613,7 @@ elif st.session_state.anim_status == "running":
         st.session_state.current_step_idx = idx
         current_n = frame_indices[idx]
         progress_bar.progress(int((idx + 1) / len(frame_indices) * 100))
-        render_frame_ui(current_n)
+        render_frame_ui(current_n, play_sound=True)
         time.sleep(1 / fps)
 
     progress_bar.empty()
